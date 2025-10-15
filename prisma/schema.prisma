@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ASSISTANT
+  CLIENT
+}
+
+enum ApptStatus {
+  SCHEDULED
+  ARRIVED
+  IN_SERVICE
+  COMPLETED
+  NO_SHOW
+  CANCELED
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
+}
+
+model User {
+  id           String     @id @default(cuid())
+  role         Role       @default(CLIENT)
+  email        String     @unique
+  passwordHash String
+  name         String
+  phone        String?
+  locale       String     @default("it")
+  pushToken    String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  Client       Client?
+  Assistant    Assistant?
+  Owner        Owner?
+}
+
+model Owner {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Assistant {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id])
+}
+
+model Service {
+  id         String   @id @default(cuid())
+  name       String
+  durationM  Int
+  priceCents Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  // back-relations
+  appointments Appointment[]
+  waitlists    Waitlist[]
+}
+
+model AddOn {
+  id         String  @id @default(cuid())
+  name       String
+  priceCents Int     @default(0)
+  active     Boolean @default(true)
+}
+
+model OpeningHours {
+  id            String  @id @default(cuid())
+  weekday       Int     @unique // 0=Sun..6=Sat
+  openMin       Int?
+  closeMin      Int?
+  breakStartMin Int?
+  breakEndMin   Int?
+  closed        Boolean @default(false)
+}
+
+model Blackout {
+  id     String   @id @default(cuid())
+  date   DateTime @unique
+  reason String?
+}
+
+model Client {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  notes         String?
+  loyaltyStamps Int      @default(0)
+  createdAt     DateTime @default(now())
+
+  // back-relations
+  appointments   Appointment[]
+  reviews        Review[]
+  waitlists      Waitlist[]
+  lotteryEntries LotteryEntry[]
+  lotteryWins    LotteryWinner[]
+}
+
+model Appointment {
+  id         String     @id @default(cuid())
+  clientId   String
+  serviceId  String
+  start      DateTime
+  end        DateTime
+  status     ApptStatus @default(SCHEDULED)
+  priceCents Int
+  createdAt  DateTime   @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  // back-relations
+  review      Review?
+  lotteryRefs LotteryEntry[]
+
+  @@index([start, end, status])
+}
+
+model Review {
+  id            String   @id @default(cuid())
+  appointmentId String   @unique
+  clientId      String
+  rating        Int
+  comment       String?
+  published     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id])
+  client      Client      @relation(fields: [clientId], references: [id])
+}
+
+model DiscountCode {
+  id        String       @id @default(cuid())
+  code      String       @unique
+  type      DiscountType
+  value     Int
+  validFrom DateTime?
+  validTo   DateTime?
+  active    Boolean      @default(true)
+}
+
+model Waitlist {
+  id        String   @id @default(cuid())
+  clientId  String
+  serviceId String
+  date      DateTime // preferred day
+  notified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  client  Client  @relation(fields: [clientId], references: [id])
+  service Service @relation(fields: [serviceId], references: [id])
+
+  @@index([date, serviceId, notified])
+}
+
+model LotteryEntry {
+  id        String   @id @default(cuid())
+  monthKey  String // e.g., "2025-10"
+  clientId  String
+  apptId    String
+  createdAt DateTime @default(now())
+
+  client      Client      @relation(fields: [clientId], references: [id])
+  appointment Appointment @relation(fields: [apptId], references: [id])
+
+  @@index([monthKey, clientId])
+}
+
+model LotteryWinner {
+  id       String   @id @default(cuid())
+  monthKey String   @unique
+  clientId String
+  prize    String // free service description
+  drawnAt  DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+}
