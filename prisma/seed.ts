@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client'
+import { PrismaClient, type Prisma } from '@prisma/client'
 import crypto from 'node:crypto'
 
 const prisma = new PrismaClient()
@@ -42,7 +42,7 @@ async function main() {
   })
 
   // Orari di apertura (0=Dom ... 6=Sab) — Dom/Lun chiuso; Mar–Sab 09–19, pausa 13–14
-  const hours = [
+  const hours: Prisma.OpeningHoursCreateInput[] = [
     { weekday: 0, closed: true },
     { weekday: 1, closed: true },
     { weekday: 2, openMin: 540, closeMin: 1140, breakStartMin: 780, breakEndMin: 840, closed: false },
@@ -51,11 +51,19 @@ async function main() {
     { weekday: 5, openMin: 540, closeMin: 1140, breakStartMin: 780, breakEndMin: 840, closed: false },
     { weekday: 6, openMin: 540, closeMin: 1140, breakStartMin: 780, breakEndMin: 840, closed: false },
   ]
-  for (const h of hours) {
+
+  for (const entry of hours) {
+    const { weekday, ...schedule } = entry
     await prisma.openingHours.upsert({
-      where: { weekday: h.weekday as number },
-      update: h as any,
-      create: h as any,
+      where: { weekday },
+      update: {
+        openMin: schedule.openMin ?? null,
+        closeMin: schedule.closeMin ?? null,
+        breakStartMin: schedule.breakStartMin ?? null,
+        breakEndMin: schedule.breakEndMin ?? null,
+        closed: schedule.closed ?? false,
+      },
+      create: entry,
     })
   }
 
